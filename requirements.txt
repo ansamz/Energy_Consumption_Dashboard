@@ -1,5 +1,10 @@
 streamlit
 pandas
-shap
-scikit-learn==1.2.2
+plotly
+geopy
+pycountry
+pypopulation
+glob2
 matplotlib
+tqdm
+pyarrow
