@@ -23,7 +23,7 @@ if ('data' not in st.session_state) and ('capital_data' not in st.session_state)
     
     for file in files:
         df = pd.read_parquet(file)
-        df['country'] = file.split('\\')[-1].replace('.parquet', '')
+        df['country'] = file.split('/')[-1].replace('.parquet', '')
         dataframes.append(df)
 
     data = pd.concat(dataframes, ignore_index=True)
