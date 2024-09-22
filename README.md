@@ -31,4 +31,9 @@ The Streamlit app is designed to present energy consumption data in a clear and 
 3. **Anomaly Detection**: The app includes functionality to detect and highlight consumption anomalies based on z-scores, helping users identify unusual patterns.
 4. **Data Processing**: Data is processed from parquet files and SQL databases, with transformations like date-time conversions, population normalization, and geographical data integration.
 
-
+## Authors
+ - [Daniel Wullschleger](https://github.com/DaniWullschleger)
+ - [Emir Odic](https://github.com/dwnflx)
+ - [Christine Kortemeyer](https://github.com/ChrisKorte55)
+ - [Jaronimas Snipas](https://github.com/jaronimas-codes)
+ - [Ansam Zedan](https://github.com/ansamz)
