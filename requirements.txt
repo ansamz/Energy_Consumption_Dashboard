@@ -8,3 +8,6 @@ glob2
 matplotlib
 tqdm
 pyarrow
+pyodbc 
+sqlalchemy
+kaleido

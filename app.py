@@ -7,26 +7,56 @@ from geopy.geocoders import Nominatim
 import pycountry
 import pypopulation
 import glob
+import pyodbc
+import json
+import os
 
 st.set_page_config(page_title="Energy Consumption", 
-        		   page_icon="apple", 
-                #    layout="wide", 
+        		   page_icon='🌍',
+                   layout="wide", 
                    menu_items={
                        'About': "App using various models to detect fruits and vegetables"
                    })
 
-st.markdown("<h1 style='text-align: center; color: blue;'>Energy Consumption Dashboard</h1>", unsafe_allow_html=True)
+st.markdown("<h1 style='text-align: center; color: orange;'>Energy Consumption Dashboard</h1>", unsafe_allow_html=True)
+
+# fake button for demonstration
+text_contents = '''Coming Soon :D'''
+st.download_button("Download dashboard as pdf", text_contents)
+
+# -------------------------------------------------------
+# Connection to SQL server
+# server = st.secrets["azure_sql"]["server"]
+# database = st.secrets["azure_sql"]["database"]
+# username = st.secrets["azure_sql"]["username"]
+# password = st.secrets["azure_sql"]["password"]
+# driver = '{ODBC Driver 17 for SQL Server}'
+# conn = pyodbc.connect(f'DRIVER={driver};SERVER={server};PORT=1433;DATABASE={database};UID={username};PWD={password}')
 
 if ('data' not in st.session_state) and ('capital_data' not in st.session_state):
+    # -------------------------
+    # Read data from computer
+    # -------------------------
     files = glob.glob('data/*.parquet')
     dataframes = []
     
     for file in files:
         df = pd.read_parquet(file)
+        df = df.dropna()
+        df = df.drop_duplicates().reset_index(drop=True)
+        # change to / on linux and deployment
+        # df['country'] = file.split('\\')[-1].replace('.parquet', '')
         df['country'] = file.split('/')[-1].replace('.parquet', '')
         dataframes.append(df)
 
     data = pd.concat(dataframes, ignore_index=True)
+
+    # ------------------------
+    # read data from azure DB
+    # query = 'SELECT * FROM [dbo].[EnergyConsumption]'
+    # data = pd.read_sql(query, conn)
+    # data = data.drop_duplicates()
+
     data['start'] = pd.to_datetime(data['start'])
     data['end'] = pd.to_datetime(data['end'])
     data['hour_start'] = data['start'].dt.hour
@@ -35,6 +65,7 @@ if ('data' not in st.session_state) and ('capital_data' not in st.session_state)
     data['end_day_of_week'] = data['end'].dt.day_name()
     data['date'] = data['start'].dt.date
     data['year'] = data['start'].dt.year
+    data['month'] = data['start'].dt.month
 
     population_data = {}
     for country in data['country'].unique():
@@ -90,57 +121,59 @@ if ('data' not in st.session_state) and ('capital_data' not in st.session_state)
 capital_data = st.session_state.capital_data
 data = st.session_state.data
 
-annual_consumption = capital_data.groupby(['year', 'country', 'latitude', 'longitude'])['load'].mean().reset_index()
-
 # -------------------------------------------------------------------------------
 # app
 
-# Plot 1: GeoPlot
-fig_geo = px.scatter_mapbox(annual_consumption, lat='latitude', lon='longitude',
-                            color='load', size='load',
+annual_consumption = capital_data.groupby(['year', 'country', 'latitude', 'longitude', 'population'])['load'].mean().reset_index()
+
+st.markdown("<h2 style='text-align: left; color: red;'>🌍 Overview of Annual Energy Consumption Patterns Across Europe</h2>", unsafe_allow_html=True)
+
+deo_col, bar_col = st.columns(2)
+
+with open('data/countries.geojson') as f:
+    countries_geojson = json.load(f)
+
+# map plot
+fig_geo = px.choropleth_mapbox(annual_consumption, 
+                            geojson=countries_geojson, 
+                            locations='country', 
+                            featureidkey="properties.ADMIN",
+                            color='load', 
                             animation_frame='year',
-                            mapbox_style="open-street-map",
-                            color_continuous_scale=px.colors.sequential.Blues,
-                            size_max=15, zoom=3,
-                            title='Energy Consumption by Country Over Time')
-fig_geo.update_layout(width=1000, height=800)
-st.plotly_chart(fig_geo)
+                            mapbox_style="white-bg",
+                            color_continuous_scale=px.colors.sequential.Turbo)
 
-selected_country = st.selectbox("Select a Country", options=data['country'].unique())
+fig_geo.update_layout(mapbox_zoom=2.5, mapbox_center={"lat": 54.5260, "lon": 15.2551},
+                        width=1000, height=800)
 
-country_data = data[data['country'] == selected_country]
+deo_col.plotly_chart(fig_geo, use_container_width=True)
 
-daily_consumption = country_data.groupby(['date', 'country'])['load'].mean().reset_index()
-hourly_consumption = country_data.groupby(['hour_start', 'country'])['load'].mean().reset_index()
+# barplot per country
+fig_bar_country = px.bar(annual_consumption, x='country', y='load', 
+            labels={'load': 'Annual Consumption (MW)', 'country': 'Country'},
+            animation_frame='year',
+            width=800, height=800)
 
-# Plot 2: Average Hourly Energy Consumption
-fig_hourly = go.Figure()
-fig_hourly.add_trace(go.Scatter(x=hourly_consumption['hour_start'], 
-                                y=hourly_consumption['load'], 
-                                mode='lines', 
-                                name=selected_country))
+fig_bar_country.update_layout(xaxis={'categoryorder':'total ascending'})
+bar_col.plotly_chart(fig_bar_country, use_container_width=True)
 
-fig_hourly.update_layout(
-    title=f"Average Hourly Energy Consumption - {selected_country}",
-    xaxis_title='Hour of the Day',
-    yaxis_title='Energy Consumption (Load)',
-    template='plotly_white'
-)
+# Distribution of overall evergy consumption
+show_histogram_checkbox = st.checkbox('Show Overall Distribution of Energy consumption')
+if show_histogram_checkbox:
+    fig_dist = px.histogram(data, x='load', title="Distribution of Energy Consumption (Load)", width=800, height=600)
+    st.plotly_chart(fig_dist)
 
-st.plotly_chart(fig_hourly)
+st.markdown("<h3 style='text-align: left; color: red;'>Energy Consumption per Country</h3>", unsafe_allow_html=True)
 
-# Plot 3: Average Daily Energy Consumption
-fig_daily = go.Figure()
-fig_daily.add_trace(go.Scatter(x=daily_consumption['date'], 
-                               y=daily_consumption['load'], 
-                               mode='lines', 
-                               name=selected_country))
+box_col, box_norm_col = st.columns(2)
 
-fig_daily.update_layout(
-    title=f"Average Daily Energy Consumption - {selected_country}",
-    xaxis_title='Date',
-    yaxis_title='Energy Consumption (Load)',
-    template='plotly_white'
-)
+fig_box = go.Figure()
+fig_box.add_trace(go.Box(x=data['country'], y=data['load'], name='Load Distribution'))
+fig_box.update_layout(title="Distribution of Load by Country", width=1000, height=800)
+box_col.plotly_chart(fig_box, use_container_width=True)
 
-st.plotly_chart(fig_daily)
+data['normalized_load'] = data['load'] / data['population']
+fig_box2 = go.Figure()
+fig_box2.add_trace(go.Box(x=data['country'], y=data['normalized_load'], name='Normalized Load per Capita'))
+fig_box2.update_layout(title="Distribution of Normalized Load by Country", width=1000, height=800)
+box_norm_col.plotly_chart(fig_box2, use_container_width=True)
